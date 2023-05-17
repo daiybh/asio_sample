@@ -35,16 +35,19 @@ awaitable<void> produce_tokens(std::size_t bytes_per_token,
 	printf("produce_tokens\n");
 	steady_timer timer(co_await this_coro::executor);
 	for (;;)
-	{
+	{ 
 		co_await tokens.async_send(
 			asio::error_code{}, bytes_per_token,
 			use_awaitable);
 
 		timer.expires_after(token_interval);
 		co_await timer.async_wait(use_awaitable);
+
 	}
 	printf("produce_tokens end\n");
 }
+
+
 
 awaitable<void> transfer(tcp::socket& from,
 	tcp::socket& to, token_channel& tokens)
@@ -58,7 +61,6 @@ awaitable<void> transfer(tcp::socket& from,
 		{
 			std::size_t n = co_await from.async_read_some(
 				buffer(data, bytes_available), use_awaitable);
-
 			co_await async_write(to, buffer(data, n), use_awaitable);
 
 			bytes_available -= n;
@@ -79,21 +81,30 @@ awaitable<void> proxy(tcp::socket client, tcp::endpoint target)
 	token_channel server_tokens(ex, number_of_tokens);
 
 	;
-	auto client_raddress = client.remote_endpoint().address();
+	
+	try {
+		co_await server.async_connect(target, use_awaitable);
+		
+
+		co_await(
+			produce_tokens(bytes_per_token, token_interval, client_tokens) &&
+			transfer(client, server, client_tokens) &&
+			produce_tokens(bytes_per_token, token_interval, server_tokens) &&
+			transfer(server, client, server_tokens)
+			);
+
+	}
+	catch (std::exception& e)
+	{
+		std::printf("echo Exception: %s\n", e.what());
+	}
+	{auto client_raddress = client.remote_endpoint().address();
 	auto client_rPort = client.remote_endpoint().port();
 	auto client_laddress = client.local_endpoint().address();
 	auto client_lPort = client.local_endpoint().port();
 	std::cout << "client:local:" << client_raddress.to_string() << "   :" << client_rPort << std::endl;
 	std::cout << "client:remote:" << client_laddress.to_string() << "   :" << client_lPort << std::endl;
-
-	co_await server.async_connect(target, use_awaitable);
-	co_await(
-		produce_tokens(bytes_per_token, token_interval, client_tokens) &&
-		transfer(client, server, client_tokens) &&
-		produce_tokens(bytes_per_token, token_interval, server_tokens) &&
-		transfer(server, client, server_tokens)
-		);
-
+	}
 	{auto client_raddress = server.remote_endpoint().address();
 	auto client_rPort = server.remote_endpoint().port();
 	auto client_laddress = server.local_endpoint().address();
@@ -102,6 +113,7 @@ awaitable<void> proxy(tcp::socket client, tcp::endpoint target)
 	std::cout << "server:local:" << client_raddress.to_string() << "   :" << client_rPort << std::endl;
 	std::cout << "server:remote:" << client_laddress.to_string() << "   :" << client_lPort << std::endl;
 	}
+
 }
 
 awaitable<void> listen(tcp::acceptor& acceptor, tcp::endpoint target)
@@ -137,7 +149,7 @@ int main(int argc, char* argv[])
 		}
 
 		io_context ctx;
-		const char* localAddr = "192.168.123.103";
+		const char* localAddr = "127.0.0.1";
 		const char* localPort = "10009";
 		const char* target_Port = "10008";
 		auto listen_endpoint =
