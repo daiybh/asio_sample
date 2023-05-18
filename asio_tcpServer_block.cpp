@@ -26,7 +26,7 @@ void session(tcp::socket sock)
 	{
 		tcp::socket upStreamSocket(io_context); 
 		tcp::resolver resolver(io_context);
-		tcp::endpoint remote_endpoint(asio::ip::address::from_string("192.168.123.103"), 10008);
+		tcp::endpoint remote_endpoint(asio::ip::address::from_string("127.0.0.1"), 10008);
 		upStreamSocket.connect(remote_endpoint);
 		for (;;)
 		{
